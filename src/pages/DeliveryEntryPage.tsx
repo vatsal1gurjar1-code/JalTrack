@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { fetchCustomers } from "@/api/customers"
 import { fetchDeliveries, createDelivery, deleteDelivery, type Delivery } from "@/api/deliveries"
@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Search, Undo2, Droplets, Truck } from "lucide-react"
+import { Search, Undo2, Droplets, Truck, Rows3, LayoutGrid } from "lucide-react"
 import { format } from "date-fns"
 
 type DeliveryList = { deliveries: Delivery[]; total: number }
@@ -39,10 +39,55 @@ if (import.meta.env.DEV) {
   console.assert(g.get(2)!.lastId === null, "customer with only pending rows has nothing to undo")
 }
 
+type View = "cards" | "register"
+
+/** The +1/+2/+3 and undo cluster, shared by both layouts. */
+function JugButtons({
+  lastId,
+  onDeliver,
+  onUndo,
+}: {
+  lastId: number | null
+  onDeliver: (count: number) => void
+  onUndo: (id: number) => void
+}) {
+  return (
+    <div className="flex items-center justify-end gap-1.5">
+      {[1, 2, 3].map((count) => (
+        <Button
+          key={count}
+          size="sm"
+          variant={count === 1 ? "default" : count === 2 ? "secondary" : "outline"}
+          className="w-10 h-9 text-xs font-bold"
+          onClick={() => onDeliver(count)}
+        >
+          +{count}
+        </Button>
+      ))}
+      {/* Kept in the layout when absent so register columns stay aligned. */}
+      <Button
+        size="sm"
+        variant="ghost"
+        title="Undo last entry"
+        disabled={!lastId}
+        onClick={() => lastId && onUndo(lastId)}
+        className={`w-9 h-9 ${lastId ? "text-gray-400 hover:text-red-500" : "invisible"}`}
+      >
+        <Undo2 className="w-4 h-4" />
+      </Button>
+    </div>
+  )
+}
+
 export default function DeliveryEntryPage() {
   const [search, setSearch] = useState("")
   const [areaFilter, setAreaFilter] = useState("")
+  const [view, setView] = useState<View>(
+    () => (localStorage.getItem("delivery_view") as View) || "register"
+  )
   const queryClient = useQueryClient()
+
+  useEffect(() => localStorage.setItem("delivery_view", view), [view])
 
   const { data: customerData } = useQuery({
     queryKey: ["customers", "all"],
@@ -124,14 +169,35 @@ export default function DeliveryEntryPage() {
       </div>
 
       {/* Stats bar */}
-      <div className="flex gap-3 overflow-x-auto pb-1">
-        <div className="flex items-center gap-2 bg-blue-50 text-blue-700 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap">
-          <Droplets className="w-4 h-4" />
-          {totalJugsToday} jugs
+      <div className="flex items-center gap-3">
+        <div className="flex gap-3 overflow-x-auto pb-1 flex-1">
+          <div className="flex items-center gap-2 bg-blue-50 text-blue-700 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap">
+            <Droplets className="w-4 h-4" />
+            {totalJugsToday} jugs
+          </div>
+          <div className="flex items-center gap-2 bg-green-50 text-green-700 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap">
+            <Truck className="w-4 h-4" />
+            {servedToday}/{customerData?.total ?? 0} served
+          </div>
         </div>
-        <div className="flex items-center gap-2 bg-green-50 text-green-700 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap">
-          <Truck className="w-4 h-4" />
-          {servedToday}/{customerData?.total ?? 0} served
+
+        <div className="flex rounded-md border border-gray-300 overflow-hidden flex-shrink-0">
+          {([
+            { key: "register", icon: Rows3, label: "Register" },
+            { key: "cards", icon: LayoutGrid, label: "Cards" },
+          ] as const).map((v) => (
+            <button
+              key={v.key}
+              onClick={() => setView(v.key)}
+              title={`${v.label} view`}
+              className={`flex items-center gap-1.5 px-2.5 h-9 text-xs font-medium transition-colors cursor-pointer ${
+                view === v.key ? "bg-blue-600 text-white" : "bg-white text-gray-500 hover:bg-gray-50"
+              }`}
+            >
+              <v.icon className="w-4 h-4" />
+              <span className="hidden sm:inline">{v.label}</span>
+            </button>
+          ))}
         </div>
       </div>
 
@@ -158,63 +224,112 @@ export default function DeliveryEntryPage() {
         </select>
       </div>
 
-      {/* Customer list */}
-      <div className="space-y-2">
-        {filtered.map((customer) => {
-          const info = deliveriesByCustomer.get(customer.id)
-          const todayCount = info?.total ?? 0
-          const lastId = info?.lastId
+      {filtered.length === 0 ? (
+        <p className="text-center text-sm text-gray-400 py-12">No customers found</p>
+      ) : view === "register" ? (
+        /* Register - a ruled ledger, like the paper book */
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-gray-100 text-gray-600 border-b-2 border-gray-300">
+                  <th className="w-14 px-2 py-2 text-center font-semibold border-r border-gray-200">Sr.</th>
+                  <th className="px-3 py-2 text-left font-semibold border-r border-gray-200">Customer</th>
+                  <th className="px-3 py-2 text-left font-semibold border-r border-gray-200 hidden sm:table-cell">Area</th>
+                  <th className="w-20 px-2 py-2 text-center font-semibold border-r border-gray-200">Jugs</th>
+                  <th className="px-3 py-2 text-right font-semibold">Entry</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((customer, i) => {
+                  const info = deliveriesByCustomer.get(customer.id)
+                  const todayCount = info?.total ?? 0
+                  const lastId = info?.lastId ?? null
 
-          return (
-            <Card key={customer.id} className="overflow-hidden">
-              <CardContent className="p-3 sm:p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-gray-900 truncate">{customer.name}</p>
-                      {customer.area && (
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 hidden sm:inline-flex">
-                          {customer.area}
-                        </Badge>
+                  return (
+                    <tr
+                      key={customer.id}
+                      className={`border-b border-gray-200 ${i % 2 ? "bg-gray-50/60" : "bg-white"} hover:bg-blue-50/50`}
+                    >
+                      <td className="px-2 py-1.5 text-center text-gray-400 tabular-nums border-r border-gray-100">
+                        {i + 1}
+                      </td>
+                      <td className="px-3 py-1.5 font-medium text-gray-900 border-r border-gray-100">
+                        {customer.name}
+                      </td>
+                      <td className="px-3 py-1.5 text-gray-500 border-r border-gray-100 hidden sm:table-cell">
+                        {customer.area || "—"}
+                      </td>
+                      <td className="px-2 py-1.5 text-center border-r border-gray-100 tabular-nums">
+                        {todayCount > 0 ? (
+                          <span className="font-bold text-green-700">{todayCount}</span>
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1">
+                        <JugButtons
+                          lastId={lastId}
+                          onDeliver={(count) => deliverMut.mutate({ customerId: customer.id, count })}
+                          onUndo={(id) => undoMut.mutate(id)}
+                        />
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="bg-gray-100 font-bold border-t-2 border-gray-300">
+                  <td className="px-2 py-2 text-center text-gray-400">—</td>
+                  <td className="px-3 py-2" colSpan={2}>TOTAL</td>
+                  <td className="px-2 py-2 text-center tabular-nums text-green-700">{totalJugsToday}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </Card>
+      ) : (
+        /* Cards - roomier tap targets for phone use */
+        <div className="space-y-2">
+          {filtered.map((customer, i) => {
+            const info = deliveriesByCustomer.get(customer.id)
+            const todayCount = info?.total ?? 0
+            const lastId = info?.lastId ?? null
+
+            return (
+              <Card key={customer.id} className="overflow-hidden">
+                <CardContent className="p-3 sm:p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400 tabular-nums w-6 flex-shrink-0">{i + 1}.</span>
+                        <p className="text-sm font-medium text-gray-900 truncate">{customer.name}</p>
+                        {customer.area && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 hidden sm:inline-flex">
+                            {customer.area}
+                          </Badge>
+                        )}
+                      </div>
+                      {todayCount > 0 && (
+                        <p className="text-xs text-green-600 font-medium pl-6">
+                          Today: {todayCount} jug{todayCount > 1 ? "s" : ""}
+                        </p>
                       )}
                     </div>
-                    {todayCount > 0 && (
-                      <p className="text-xs text-green-600 font-medium">Today: {todayCount} jug{todayCount > 1 ? "s" : ""}</p>
-                    )}
-                  </div>
 
-                  <div className="flex items-center gap-1.5">
-                    {[1, 2, 3].map((count) => (
-                      <Button
-                        key={count}
-                        size="sm"
-                        variant={count === 1 ? "default" : count === 2 ? "secondary" : "outline"}
-                        className="w-10 h-9 text-xs font-bold"
-                        onClick={() => deliverMut.mutate({ customerId: customer.id, count })}
-                      >
-                        +{count}
-                      </Button>
-                    ))}
-                    {lastId && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="w-9 h-9 text-gray-400 hover:text-red-500"
-                        onClick={() => undoMut.mutate(lastId)}
-                      >
-                        <Undo2 className="w-4 h-4" />
-                      </Button>
-                    )}
+                    <JugButtons
+                      lastId={lastId}
+                      onDeliver={(count) => deliverMut.mutate({ customerId: customer.id, count })}
+                      onUndo={(id) => undoMut.mutate(id)}
+                    />
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-        {filtered.length === 0 && (
-          <p className="text-center text-sm text-gray-400 py-12">No customers found</p>
-        )}
-      </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

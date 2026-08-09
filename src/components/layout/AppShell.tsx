@@ -1,10 +1,11 @@
 import { NavLink, Outlet } from "react-router-dom"
 import { useAuth } from "@/hooks/useAuth"
-import { LayoutDashboard, Truck, Users, FileText, Settings, LogOut } from "lucide-react"
+import { LayoutDashboard, Truck, BookOpen, Users, FileText, Settings, LogOut } from "lucide-react"
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/deliveries", icon: Truck, label: "Deliveries" },
+  { to: "/register", icon: BookOpen, label: "Register" },
   { to: "/customers", icon: Users, label: "Customers" },
   { to: "/reports", icon: FileText, label: "Reports" },
   { to: "/settings", icon: Settings, label: "Settings" },
@@ -63,7 +64,8 @@ export default function AppShell() {
             to={item.to}
             end={item.to === "/"}
             className={({ isActive }) =>
-              `flex flex-col items-center gap-0.5 px-2 py-1 text-xs transition-colors ${
+              // 6 tabs, so labels shrink to stay on one line at 360px.
+              `flex flex-col items-center gap-0.5 px-1 py-1 text-[10px] leading-tight transition-colors ${
                 isActive ? "text-blue-600" : "text-gray-500"
               }`
             }

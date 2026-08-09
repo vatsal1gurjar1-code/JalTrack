@@ -5,6 +5,7 @@ import AppShell from "@/components/layout/AppShell"
 import LoginPage from "@/pages/LoginPage"
 import DashboardPage from "@/pages/DashboardPage"
 import DeliveryEntryPage from "@/pages/DeliveryEntryPage"
+import RegisterPage from "@/pages/RegisterPage"
 import CustomersPage from "@/pages/CustomersPage"
 import CustomerDetailPage from "@/pages/CustomerDetailPage"
 import ReportsPage from "@/pages/ReportsPage"
@@ -39,6 +40,7 @@ function AppRoutes() {
       >
         <Route path="/" element={<DashboardPage />} />
         <Route path="/deliveries" element={<DeliveryEntryPage />} />
+        <Route path="/register" element={<RegisterPage />} />
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/customers/:id" element={<CustomerDetailPage />} />
         <Route path="/reports" element={<ReportsPage />} />
